@@ -19,7 +19,7 @@ def compute_collision(p: np.array, v: np.array, body: Body) -> np.array:
     if vn >= 0:
         return v
     vt = compute_vt(vrel, n, vn)
-    if npl.norm(vt) <= -mu*vn:
+    if body.is_stick() or npl.norm(vt) <= -mu*vn:
         vrel = np.array([0.0,0.0,0.0])
     else:
         vrel = vt + mu*vn*vt/npl.norm(vt)

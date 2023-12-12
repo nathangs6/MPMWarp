@@ -3,12 +3,14 @@ import numpy as np
 class Body:
     _velocity: np.array
     _friction_coefficient: float
+    _is_sticky: bool
     _defining_function: callable
     _normal_generator: callable
 
-    def __init__(self, v: np.array, mu, defining_function: callable, normal_generator: callable) -> None:
+    def __init__(self, v: np.array, mu, defining_function: callable, normal_generator: callable, is_sticky=False) -> None:
         self._velocity = v
         self._friction_coefficient: mu
+        self._is_sticky = is_sticky
         self._defining_function = defining_function
         self._normal_generator = normal_generator
 
@@ -20,6 +22,9 @@ class Body:
 
     def get_mu():
         return self._friction_coefficient
+
+    def is_sticky():
+        return self._is_sticky
 
     def check_collision(p: np.array) -> bool:
         return self._defining_function(p) <= 0
