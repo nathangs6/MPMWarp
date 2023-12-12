@@ -64,23 +64,28 @@ def test_update_particle_velocity():
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
-def test_update_particle_forces():
-    old_f = np.array([wp.vec3(1.0,-2.0,0.5), wp.vec3(0.0,-0.1,3.0)])
-    new_vi = np.array([wp.vec3(0.5,-1.1,3.4)])
-    grad_wip = np.zeros((1,2,3))
-    grad_wip[0,0] = wp.vec3(1.0,2.0,3.0)
-    grad_wip[0,1] = wp.vec3(0.3,1.2,-2.7)
-    grad_wpi = grad_wip.transpose(1,0,2)
+def test_update_particle_F():
+    old_f = np.array([
+        wp.mat33(1.0,-2.0,0.5, 0.0, 0.0, 2.0, 1.0, 0.0, 3.0),
+        wp.mat33(-2.1, 1.2, 3.3, 0.0, 1.0, 2.0, 0.7, -1.3, -5.6)])
+    new_vi = wp.array([wp.vec3(0.5,-1.1,3.4)], dtype=wp.vec3)
+    grad_wpi = wp.array([
+        [wp.vec3(1.0,2.0,3.0)],
+        [wp.vec3(0.3,1.2,-2.7)]], dtype=wp.vec3, ndim=2)
     dt = 0.1
-    old_f = wp.array(old_f, dtype=wp.vec3, device="cpu")
-    new_vi = wp.array(new_vi, dtype=wp.vec3, device="cpu")
-    grad_wpi = wp.array(grad_wpi, shape=(1,2), dtype=wp.vec3, device="cpu")
+    old_f = wp.array(old_f, dtype=wp.mat33, device="cpu")
     new_f = wp.empty_like(old_f)
-    wp.launch(kernel=src.update_particle_forces,
+    wp.launch(kernel=src.update_particle_F,
               dim=2,
               inputs=[new_f, old_f, new_vi, grad_wpi, dt],
               device="cpu")
     actual = np.array(new_f)
-    expected = [np.array([0.925,-1.835,-0.01])]
+    expected = [
+        np.array([[1.2,-2.1,1.175],[-0.44,0.22,0.515],[2.36,-0.68,7.59]]),
+                 np.array([[-2.226,1.4535,4.2255],[0.2772,0.4423,-0.0361],[-0.1568,0.4238,0.6934]])]
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
+
+def test_update_particle_FE_FP():
+    # TODO: figure out how to test SVD result
+    pass
