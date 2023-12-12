@@ -36,7 +36,7 @@ def test_update_particle_velocity():
     """
     Test update_particle_velocity.
     """
-    old_vp = np.array([wp.vec3(1.0,0.0,2.0)])
+    vp = np.array([wp.vec3(1.0,0.0,2.0)])
     new_vg = np.array([wp.vec3(1.0,2.0,3.0),
                        wp.vec3(0.3,0.2,0.1),
                        wp.vec3(2.2,-3.5,1.3)])
@@ -50,22 +50,21 @@ def test_update_particle_velocity():
     wpi = wip.transpose()
     a = 0.1
 
-    old_vp = wp.array(old_vp, dtype=wp.vec3, device="cpu")
+    vp = wp.array(vp, dtype=wp.vec3, device="cpu")
     new_vg = wp.array(new_vg, dtype=wp.vec3, device="cpu")
     old_vg = wp.array(old_vg, dtype=wp.vec3, device="cpu")
     wpi = wp.array(wpi, dtype=wp.float32, device="cpu")
-    new_vp = wp.empty_like(old_vp)
     wp.launch(kernel=src.update_particle_velocity,
               dim=2,
-              inputs=[new_vp, old_vp, new_vg, old_vg, wpi, a],
+              inputs=[vp, new_vg, old_vg, wpi, a],
               device="cpu")
-    actual = np.array(new_vp)
+    actual = np.array(vp)
     expected = [np.array([5.918,-5.744,5.994])]
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
 def test_update_particle_F():
-    old_f = np.array([
+    f = np.array([
         wp.mat33(1.0,-2.0,0.5, 0.0, 0.0, 2.0, 1.0, 0.0, 3.0),
         wp.mat33(-2.1, 1.2, 3.3, 0.0, 1.0, 2.0, 0.7, -1.3, -5.6)])
     new_vi = wp.array([wp.vec3(0.5,-1.1,3.4)], dtype=wp.vec3)
@@ -73,13 +72,12 @@ def test_update_particle_F():
         [wp.vec3(1.0,2.0,3.0)],
         [wp.vec3(0.3,1.2,-2.7)]], dtype=wp.vec3, ndim=2)
     dt = 0.1
-    old_f = wp.array(old_f, dtype=wp.mat33, device="cpu")
-    new_f = wp.empty_like(old_f)
+    f = wp.array(f, dtype=wp.mat33, device="cpu")
     wp.launch(kernel=src.update_particle_F,
               dim=2,
-              inputs=[new_f, old_f, new_vi, grad_wpi, dt],
+              inputs=[f, new_vi, grad_wpi, dt],
               device="cpu")
-    actual = np.array(new_f)
+    actual = np.array(f)
     expected = [
         np.array([[1.2,-2.1,1.175],[-0.44,0.22,0.515],[2.36,-0.68,7.59]]),
                  np.array([[-2.226,1.4535,4.2255],[0.2772,0.4423,-0.0361],[-0.1568,0.4238,0.6934]])]

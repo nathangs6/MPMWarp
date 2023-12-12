@@ -1,20 +1,28 @@
 import numpy as np
+import warp as wp
 
-def init_cell_density(cell_density: np.array,
-                      m_grid: np.array,
+@wp.kernel
+def init_cell_density(cd: wp.array(dtype=wp.float32),
+                      m_g: wp.array(dtype=wp.float32),
                       h: float) -> None:
-    np.copyto(cell_density, m_grid / h**3)
+    i = wp.tid()
+    cd[i] = m_g[i] / (h*h*h)
 
-def init_particle_density(particle_density: np.array,
-                          m_grid: np.array,
-                          w: np.array,
+@wp.kernel
+def init_particle_density(pd: wp.array(dtype=wp.float32),
+                          mg: wp.array(dtype=wp.float32),
+                          wpi: wp.array(dtype=wp.float32, ndim=2),
                           h: float) -> None:
-    np.copyto(particle_density, np.matmul(m_grid.transpose(), w).transpose()/h**3)
+    p = wp.tid()
+    wp = wpi[p]
+    pd_p = float(0.0)
+    for i in range(wp.shape[0]):
+        pd_p += mg[i] * wp[i]
+    pd[p] = pd_p / (h*h*h)
 
-
-def init_particle_volume(
-    particle_volume: np.array,
-    particle_mass: np.array,
-    particle_density: np.array
-):
-    np.copyto(particle_volume, particle_mass / particle_density)
+@wp.kernel
+def init_particle_volume(v: wp.array(dtype=wp.float32),
+                         m: wp.array(dtype=wp.float32),
+                         d: wp.array(dtype=wp.float32)) -> None:
+    p = wp.tid()
+    v[p] = m[p] / d[p]

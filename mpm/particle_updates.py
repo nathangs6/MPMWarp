@@ -22,8 +22,7 @@ def compute_vW(vg: wp.array(dtype=wp.vec3),
     return result
 
 @wp.kernel
-def update_particle_velocity(new_vp: wp.array(dtype=wp.vec3),
-                             old_vp: wp.array(dtype=wp.vec3),
+def update_particle_velocity(vp: wp.array(dtype=wp.vec3),
                              new_vg: wp.array(dtype=wp.vec3),
                              old_vg: wp.array(dtype=wp.vec3),
                              wpi: wp.array(dtype=wp.float32, ndim=2),
@@ -32,7 +31,7 @@ def update_particle_velocity(new_vp: wp.array(dtype=wp.vec3),
     Update particle velocities using the grid velocities.
     """
     p = wp.tid()
-    new_vp[p] = compute_vW(new_vg, wpi[p]) + a*(old_vp[p] - compute_vW(old_vg, wpi[p]))
+    vp[p] = compute_vW(new_vg, wpi[p]) + a*(vp[p] - compute_vW(old_vg, wpi[p]))
 
 @wp.func
 def compute_outer_vi_gradwp(vi: wp.array(dtype=wp.vec3),
@@ -43,21 +42,12 @@ def compute_outer_vi_gradwp(vi: wp.array(dtype=wp.vec3),
     return result
 
 @wp.kernel
-def update_particle_F(new_f: wp.array(dtype=wp.mat33),
-                      old_f: wp.array(dtype=wp.mat33),
+def update_particle_F(f: wp.array(dtype=wp.mat33),
                       new_vi: wp.array(dtype=wp.vec3),
                       grad_wpi: wp.array(dtype=wp.vec3, ndim=2),
                       dt: float) -> None:
     p = wp.tid()
-    new_f[p] = old_f[p] + dt * wp.mul(compute_outer_vi_gradwp(new_vi, grad_wpi[p]), old_f[p])
-
-#@wp.func
-#def get_svd(A: wp.mat33) -> wp.array(dtype=wp.mat33):
-#    U = wp.mat33()
-#    s = wp.vec3()
-#    V = wp.mat33()
-#    wp.svd3(A, U, s, V)
-#    return wp.array([U, wp.diag(s), V])
+    f[p] = f[p] + dt * wp.mul(compute_outer_vi_gradwp(new_vi, grad_wpi[p]), f[p])
 
 
 @wp.func

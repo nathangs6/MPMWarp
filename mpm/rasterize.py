@@ -47,7 +47,7 @@ if __name__ == "__main__":
     ], dtype=wp.float32)
     grid_mass = wp.empty_like(mass)
     wp.launch(
-        kernel=rasterize_mass_warp,
+        kernel=rasterize_mass,
         dim=3,
         inputs=[mass, wip, grid_mass],
         device="cpu"
