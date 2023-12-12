@@ -34,6 +34,23 @@ def update_particle_velocity(new_vp: wp.array(dtype=wp.vec3),
     p = wp.tid()
     new_vp[p] = compute_vW(new_vg, wpi[p]) + a*(old_vp[p] - compute_vW(old_vg, wpi[p]))
 
+@wp.func
+def compute_force_update(vi: wp.array(dtype=wp.vec3),
+                         grad_wp: wp.array(dtype=wp.vec3)) -> wp.mat33:
+    result = wp.mat33(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    for i in range(vi.shape[0]):
+        result += wp.outer(vi[i], grad_wp[i])
+    return result
+
+@wp.kernel
+def update_particle_forces(new_f: wp.array(dtype=wp.vec3),
+                           old_f: wp.array(dtype=wp.vec3),
+                           new_vi: wp.array(dtype=wp.vec3),
+                           grad_wpi: wp.array(dtype=wp.vec3, ndim=2),
+                           dt: float) -> None:
+    p = wp.tid()
+    new_f[p] = old_f[p] + dt * warp.mul(compute_force_update(new_vi, grad_wpi[p]), old_f[p])
+
 if __name__ == "__main__":
     wp.init()
     dt = 0.1
