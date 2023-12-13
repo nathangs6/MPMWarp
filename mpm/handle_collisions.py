@@ -27,7 +27,7 @@ def compute_collision(p: np.array, v: np.array, body: Body) -> np.array:
     return vrel + vco
 
 def handle_all_collisions(x: np.array, v: np.array, bodies: np.array) -> np.array:
-    new_v = np.zeros_like(v)
+    new_v = v
     for k in range(x.shape[0]):
         for body in bodies:
             if body.check_collision(x[k]):

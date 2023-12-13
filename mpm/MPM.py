@@ -19,7 +19,7 @@ class MPM:
     gp: dict    # grid properties
     num_g: float
     interp: dict
-    num_frames: int
+    frame: int
 
     def __init__(self, scene: Scene) -> None:
         self.scene = scene
@@ -47,6 +47,10 @@ class MPM:
             "force_elastic": np.zeros(shape=(self.num_p,3,3), dtype=np.float32),
             "force_plastic": np.zeros(shape=(self.num_p,3,3), dtype=np.float32),
         }
+        for i in range(self.num_p):
+            self.pp["force"][i] = np.eye(3)
+            self.pp["force_elastic"][i] = np.eye(3)
+            self.pp["force_plastic"][i] = np.eye(3)
         self.num_g = len(scene.grid)
         self.gp = {
             "position": scene.grid,
@@ -59,13 +63,14 @@ class MPM:
             "gwip": np.empty(shape=(self.num_g, self.num_p, 3), dtype=np.float32)
         }
         self.bodies = scene.bodies
-        self.num_frames = 0
+        self.frame = 0
 
-    def run(self, num_steps, implicit=False, device="cpu"):
+    def get_position(self):
+        return np.array(self.pp["position"])
+
+    def init_animation(self, implicit=False, device="cpu"):
         wp.init()
-        self.move_to_device()
-        for n in range(num_steps):
-            self.step(implicit=implicit, device=device)
+        self.move_to_device(device=device)
 
     def move_to_device(self, device="cpu"):
         # Move particle properties
@@ -110,8 +115,7 @@ class MPM:
                   device=device)
 
         # Step 2: compute particle volumes and densities
-        if self.num_frames == 0:
-            ## Convert to warp
+        if self.frame == 0:
             wp.launch(kernel=init_properties.init_cell_density,
                       dim=self.num_g,
                       inputs=[self.gp["density"], self.gp["mass"], self.p["h"]],
@@ -126,14 +130,20 @@ class MPM:
                       device=device)
 
         # Step 3: compute grid forces
-        # Put necessary resources onto CPU
-        volume = self.pp["volume"].numpy()
-        grad_wip = self.interp["gwip"].numpy()
-        FE = self.pp["force_elastic"].numpy()
-        FP = self.pp["force_plastic"].numpy()
-        grid_forces = np.zeros_like(self.gp["velocity"])
-        grid_updates.compute_grid_forces(grid_forces, volume, grad_wip, FE, FP, self.p["mu0"], self.p["lam0"], self.p["hardening_coeff"])
-        grid_forces += np.array([0.0,0.0,-9.81], dtype=np.float32)
+        stresses = wp.zeros_like(self.pp["force"], device=device)
+        wp.launch(kernel=grid_updates.get_stresses,
+                  dim=self.num_p,
+                  inputs=[stresses, self.pp["force_elastic"], self.pp["force_plastic"], self.p["mu0"], self.p["lam0"], self.p["hardening_coeff"]],
+                  device=device)
+        grid_forces = wp.zeros_like(self.gp["velocity"], device=device)
+        wp.launch(kernel=grid_updates.compute_grid_forces,
+                  dim=self.num_g,
+                  inputs=[grid_forces, self.pp["volume"], self.interp["gwip"], stresses],
+                  device=device)
+        wp.launch(kernel=grid_updates.add_force,
+                  dim=self.num_g,
+                  inputs=[grid_forces, wp.vec3(0.0,0.0,-9.81)],
+                  device=device)
 
         # Step 4: update velocities on grid
         vg_temp = wp.zeros_like(self.gp["velocity"])
@@ -175,11 +185,13 @@ class MPM:
                   dim=self.num_p,
                   inputs=[self.pp["velocity"], new_vg, self.gp["velocity"], self.interp["wip"].transpose(), self.p["alpha"]],
                   device=device)
+        #print
 
         # Step 9: particle-based body collisions
         particle_positions = self.pp["position"].numpy()
         particle_velocities = self.pp["velocity"].numpy()
         new_vp = handle_collisions.handle_all_collisions(particle_positions, particle_velocities, self.bodies)
+        print(new_vp[0])
         self.pp["velocity"] = wp.array(new_vp, dtype=wp.vec3, device=device)
 
         # Step 10: update particle positions
@@ -189,7 +201,7 @@ class MPM:
                   device=device)
 
         # Clean up
-        self.num_frames += 1
+        self.frame += 1
 
     def animate(self) -> None:
         """

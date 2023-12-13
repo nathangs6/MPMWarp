@@ -2,52 +2,60 @@ import numpy as np
 import numpy.linalg as npl
 import warp as wp
 
+@wp.func
 def lame_parameter(c: float, zeta: float, JP: float):
-    return c * np.exp(zeta * (1 - JP))
+    return c * wp.exp(zeta * (1.0 - JP))
 
-def elasto_plastic_energy_density(
-    FE:     np.array,
-    FP:     np.array,
-    mu0:    float,
-    lam0:   float,
-    zeta:   float
-):
-    JE      =   npl.det(FE)
-    JP      =   npl.det(FP)
-    mu      =   lame_parameter(mu0, zeta, JP)
-    lam     =   lame_parameter(lam0, zeta, JP)
-    U, S, V =   npl.svd(FE)
-    RE      =   U * np.transpose(V)
+@wp.func
+def compute_stress(FE: wp.mat33, FP: wp.mat33, mu0: float, lam0: float, zeta: float) -> wp.mat33:
+    JE      = wp.determinant(FE)
+    JP      = wp.determinant(FP)
+    mu      = lame_parameter(mu0, zeta, JP)
+    lam     = lame_parameter(lam0, zeta, JP)
+    U       = wp.mat33(dtype=wp.float32)
+    S       = wp.vec3(dtype=wp.float32)
+    V       = wp.mat33(dtype=wp.float32)
+    wp.svd3(FE, U, S, V)
+    RE      = U * wp.transpose(V)
+    return (2.0*mu*(FE-RE)*wp.transpose(FE) + lam*(JE-1.0)*JE*wp.identity(n=3, dtype=wp.float32))/JP
 
-    return mu * npl.norm(FE - RE)**2 + (lam/2) * (JE - 1)**2
+@wp.kernel
+def get_stresses(stress: wp.array(dtype=wp.mat33),
+                 FE: wp.array(dtype=wp.mat33),
+                 FP: wp.array(dtype=wp.mat33),
+                 mu0: float,
+                 lam0: float,
+                 zeta: float) -> None:
+    p = wp.tid()
+    stress[p] = compute_stress(FE[p], FP[p], mu0, lam0, zeta)
 
-def d_elasto_plastic_energy_density(FE: np.array, FP: np.array, mu0: float, zeta: float):
-    JP      =   npl.det(FP)
-    mu      =   lame_parameter(mu0, zeta, JP)
-    U, S, V =   npl.svd(FE)
-    RE      =   np.matmul(U, np.transpose(V))
-    return 2*mu*(FE - RE)
+@wp.func
+def sum_stresses(volume: wp.array(dtype=wp.float32),
+                 stress: wp.array(dtype=wp.mat33),
+                 grad_wi: wp.array(dtype=wp.vec3)) -> wp.vec3:
+    result = wp.vec3(0.0, 0.0, 0.0)
+    for p in range(volume.shape[0]):
+        result += volume[p] * stress[p] * grad_wi[p]
+    return result
 
-
+@wp.kernel
 def compute_grid_forces(
-    grid_forces:    np.array,
-    volume:         np.array,
-    grad_wip:       np.array,
-    FE:             np.array,
-    FP:             np.array,
-    mu0:            float,
-    lam0:           float,
-    zeta:           float
+    grid_forces:    wp.array(dtype=wp.vec3),
+    volume:         wp.array(dtype=wp.float32),
+    grad_wip:       wp.array(dtype=wp.vec3, ndim=2),
+    stress:         wp.array(dtype=wp.mat33)
 ):
     """
     Compute the grid forces.
     """
-    for i in range(len(grid_forces)):
-        grid_forces[i] = np.array([0.0,0.0,0.0], dtype=np.float32)
-        for p in range(len(FE)):
-            stress = (1/npl.det(FP[p])) * d_elasto_plastic_energy_density(FE[p], FP[p], mu0, zeta) * np.transpose(FE[p])
-            grid_forces[i] -= volume[p] * np.matmul(stress, grad_wip[i][p])
+    i = wp.tid()
+    grid_forces[i] = -1.0 * sum_stresses(volume, stress, grad_wip[i])
 
+@wp.kernel
+def add_force(force: wp.array(dtype=wp.vec3),
+              new_force: wp.vec3) -> None:
+    i = wp.tid()
+    force[i] = force[i] + new_force
 
 @wp.kernel
 def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec3),

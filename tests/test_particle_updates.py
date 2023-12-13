@@ -85,5 +85,26 @@ def test_update_particle_F():
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
 def test_update_particle_FE_FP():
-    # TODO: figure out how to test SVD result
-    pass
+    FE = wp.array([wp.mat33(0.1,0.0,0.0,0.0,2.0,0.0,0.0,0.0,3.0),
+                   wp.mat33(2.0,0.0,0.0,0.0,2.0,0.0,0.0,0.0,0.2)], dtype=wp.mat33)
+    FP = wp.array([wp.mat33(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0),
+                   wp.mat33(1.0,0.0,0.0,0.0,2.0,0.0,0.0,0.0,3.0)], dtype=wp.mat33)
+    F = wp.array([wp.mat33(1.0,0.0,0.0,0.0,2.0,0.0,0.0,0.0,3.0),
+                   wp.mat33(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0)], dtype=wp.mat33)
+    new_vi = wp.array([wp.vec3(1.0,0.0,0.0),
+                       wp.vec3(0.0,2.0,0.0),
+                       wp.vec3(0.0,0.0,3.0)], dtype=wp.vec3)
+    grad_wpi = wp.array([[wp.vec3(1.0,0.0,0.0), wp.vec3(0.0,3.0,0.0), wp.vec3(0.0,0.0,2.0)],
+                         [wp.vec3(1.0,2.0,0.0), wp.vec3(0.1,0.0,0.3), wp.vec3(1.0,2.0,3.0)]], dtype=wp.vec3)
+    dt = 0.0 # for simple SVD
+    theta_c = 0.1
+    theta_s = 0.2
+    wp.launch(kernel=src.update_particle_FE_FP,
+              dim=2,
+              inputs=[FE, FP, F, new_vi, grad_wpi, dt, theta_c, theta_s],
+              device="cpu")
+    actual_FE = np.array(FE)
+    expected = [[[0.9,0,0],[0,1.2,0],[0,0,1.2]],[[1.2,0,0],[0,1.2,0],[0,0,0.9]]]
+    for i in range(len(expected)):
+        assert np.linalg.norm(actual_FE[i] - expected[i]) <= TOL
+
